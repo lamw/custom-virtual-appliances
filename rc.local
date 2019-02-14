@@ -1,0 +1,56 @@
+#!/bin/bash -x
+# William Lam
+# www.virtuallyghetto.com
+# Sample Network Customization script for VMware PhotonOS
+
+if [ -e /root/ran_customization ]; then
+    exit
+else
+    NETWORK_CONFIG_FILE=$(ls /etc/systemd/network | grep .network)
+
+    HOSTNAME_PROPERTY=$(vmtoolsd --cmd "info-get guestinfo.ovfEnv" | grep "guestinfo.hostname")
+    IP_ADDRESS_PROPERTY=$(vmtoolsd --cmd "info-get guestinfo.ovfEnv" | grep "guestinfo.ipaddress")
+    NETMASK_PROPERTY=$(vmtoolsd --cmd "info-get guestinfo.ovfEnv" | grep "guestinfo.netmask")
+    GATEWAY_PROPERTY=$(vmtoolsd --cmd "info-get guestinfo.ovfEnv" | grep "guestinfo.gateway")
+    DNS_SERVER_PROPERTY=$(vmtoolsd --cmd "info-get guestinfo.ovfEnv" | grep "guestinfo.dns")
+    DNS_DOMAIN_PROPERTY=$(vmtoolsd --cmd "info-get guestinfo.ovfEnv" | grep "guestinfo.domain")
+
+    ##################################
+    ### No User Input, assume DHCP ###
+    ##################################
+    if [ -z "${HOSTNAME_PROPERTY}" ]; then
+        cat > /etc/systemd/network/${NETWORK_CONFIG_FILE} << __CUSTOMIZE_PHOTON__
+[Match]
+Name=e*
+
+[Network]
+DHCP=yes
+IPv6AcceptRA=no
+__CUSTOMIZE_PHOTON__
+    #########################
+    ### Static IP Address ###
+    #########################
+    else
+        HOSTNAME=$(echo "${HOSTNAME_PROPERTY}" | awk -F 'oe:value="' '{print $2}' | awk -F '"' '{print $1}')
+        IP_ADDRESS=$(echo "${IP_ADDRESS_PROPERTY}" | awk -F 'oe:value="' '{print $2}' | awk -F '"' '{print $1}')
+        NETMASK=$(echo "${NETMASK_PROPERTY}" | awk -F 'oe:value="' '{print $2}' | awk -F '"' '{print $1}')
+        GATEWAY=$(echo "${NETMASK_PROPERTY}" | awk -F 'oe:value="' '{print $2}' | awk -F '"' '{print $1}')
+        DNS_SERVER=$(echo "${NETMASK_PROPERTY}" | awk -F 'oe:value="' '{print $2}' | awk -F '"' '{print $1}')
+        DNS_DOMAIN=$(echo "${NETMASK_PROPERTY}" | awk -F 'oe:value="' '{print $2}' | awk -F '"' '{print $1}')
+
+        cat > /etc/systemd/network/${NETWORK_CONFIG_FILE} << __CUSTOMIZE_PHOTON__
+[Match]
+Name=e*
+
+[Network]
+Address=${IP_ADDRESS}/${NETMASK}
+Gateway=${GATEWAY}
+DNS=${DNS_SERVER}
+Domain=${DNS_DOMAIN}
+__CUSTOMIZE_PHOTON__
+
+    hostnamectl set-hostname ${HOSTNAME}
+    systemctl restart systemd-networkd
+    touch /root/ran_customization
+    fi
+fi
